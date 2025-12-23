@@ -6,7 +6,7 @@ A C++ implementation of a rolling window data structure for network telemetry me
 
 This project implements a `RollingWindow` class that maintains a 45-second sliding window of network metrics using a time-indexed circular buffer. The design encapsulates complexity within the module while providing a clean, powerful API. 
 
-**Expanded scope (per take-home):** the rolling window is the foundation for a multi-interface telemetry agent that:
+**Expanded scope:** the rolling window is the foundation for a multi-interface telemetry agent that:
 
 * ingests per-interface measurements continuously.
 * computes a normalized health score.
@@ -19,7 +19,8 @@ This project implements a `RollingWindow` class that maintains a 45-second slidi
 
 ### Deep Modules (Ousterhout-style)
 
-John Ousterhout’s “deep module” idea: *hide complexity behind a small, powerful interface*. In this repo, the complexity is pushed down into a few modules that each do one hard thing well.
+John Ousterhout’s “deep module” idea: *hide complexity behind a small, powerful interface*. 
+In this repo, the complexity is pushed down into a few modules that each do one hard thing well.
 
 ### Requirements → Modules Mapping
 
@@ -40,26 +41,26 @@ John Ousterhout’s “deep module” idea: *hide complexity behind a small, pow
 
 **Public API:**
 
-* `bool ingest(int64_t ts, const Metrics& m)` - Add a sample at timestamp `ts`
-* `void note_time(int64_t ts_now)` - Advance time without adding samples
-* `Summary summary() const` - Get current window statistics
-* Debug helpers: `bool has_sample(int64_t ts)`, `std::optional<Metrics> get(int64_t ts)`
+* `bool ingest(int64_t ts, const Metrics& m)` - Add a sample at timestamp `ts`.
+* `void note_time(int64_t ts_now)` - Advance time without adding samples.
+* `Summary summary() const` - Get current window statistics.
+* Debug helpers: `bool has_sample(int64_t ts)`, `std::optional<Metrics> get(int64_t ts)`.
 
 **Data Structures:**
 
-* `Metrics` - Network sample data: `{rtt_ms, throughput_mbps, loss_pct, jitter_ms}`
-* `Summary` - Window statistics: `{newest_ts, oldest_ts, count, confidence, missing_rate, avg_rtt, avg_tp, avg_loss, avg_jit}`
+* `Metrics` - Network sample data: `{rtt_ms, throughput_mbps, loss_pct, jitter_ms}`.
+* `Summary` - Window statistics: `{newest_ts, oldest_ts, count, confidence, missing_rate, avg_rtt, avg_tp, avg_loss, avg_jit}`.
 
 **Key Features**
 
-* **45-second rolling window** with time-indexed circular buffer
-* **Out-of-order sample handling** within the window
-* **Automatic eviction** of old samples
-* **Confidence metric** (`count/45`) indicating data completeness
-* **O(1) ingest** and **O(1) summary** operations (fixed 45-slot scan)
-* **Thread-safe design** (single-threaded usage assumed) 
+* **45-second rolling window** with time-indexed circular buffer.
+* **Out-of-order sample handling** within the window.
+* **Automatic eviction** of old samples.
+* **Confidence metric** (`count/45`) indicating data completeness.
+* **O(1) ingest** and **O(1) summary** operations (fixed 45-slot scan).
+* **Thread-safe design** (single-threaded usage assumed) .
 
-> Note on “avoid rescanning”: summary scans a fixed 45-slot buffer (constant time, tiny constant). This keeps correctness simple under missing/out-of-order/time jumps. If you later increase sampling rate/window size, this can be upgraded to running aggregates with explicit eviction.
+> Note on “avoid rescanning”: summary scans a fixed 45-slot buffer (constant time, tiny constant). This keeps correctness simple under missing/out-of-order/time jumps. If we later increase sampling rate/window size, this can be upgraded to running aggregates with explicit eviction.
 
 ---
 
@@ -99,7 +100,7 @@ Tiny ASCII FSM diagram:
    v                                            |
 [DEGRADED] ---- score < down_enter for M ticks -> [DOWN]
    ^   |                                            |
-   |   | score < healthy_exit for K ticks            |
+   |   | score < healthy_exit for K ticks           |
    |   +---------------------------+                |
    |                               |                |
    +--- score > down_exit for P ticks --------------+
