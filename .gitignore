@@ -1,0 +1,98 @@
+# Build directories
+build*
+bld*
+cmake-build-debug/
+cmake-build-release/
+out/
+dist/
+
+# Object files and archives
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+*.exe
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE and Editor
+take_home_exam.pdf
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.cbp
+*.layout
+*.depend
+*.cproject
+*.project
+.settings/
+.cdt*
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln.DotSettings
+Debug/
+Release/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xccheckout
+
+# Qt Creator
+*.pro.user
+.qtc_clangd/
+
+# Compiled Python
+*.pyc
+__pycache__/
+
+# Dependencies
+/include/
+/lib/
+/bin/
+vendor/
+third_party/
+deps/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+.swp*
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.directory
+
+# Doxygen documentation
+docs/html/
+docs/latex/
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# LLVM / Clang
+.llvm-profile
