@@ -6,15 +6,6 @@
 
 namespace telemetry {
 
-static const char* to_string(IfStatus s) {
-  switch (s) {
-    case IfStatus::Healthy:  return "healthy";
-    case IfStatus::Degraded: return "degraded";
-    case IfStatus::Down:     return "down";
-  }
-  return "unknown";
-}
-
 InterfaceTracker::InterfaceTracker(std::string iface, AgentConfig cfg)
   : iface_(std::move(iface)),
     cfg_(cfg),

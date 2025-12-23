@@ -6,15 +6,6 @@
 
 using namespace telemetry;
 
-static const char* status_str(IfStatus s) {
-  switch (s) {
-    case IfStatus::Healthy:  return "healthy";
-    case IfStatus::Degraded: return "degraded";
-    case IfStatus::Down:     return "down";
-  }
-  return "unknown";
-}
-
 int main() {
   AgentConfig cfg;
 
@@ -60,14 +51,14 @@ int main() {
 
     if (auto ev = eth0.last_transition()) {
       std::cout << "[" << ev->ts << "] " << ev->iface << " transition: "
-                << status_str(ev->from) << " -> " << status_str(ev->to)
+                << to_string(ev->from) << " -> " << to_string(ev->to)
                 << " | " << ev->reason << "\n";
     }
 
     auto snap = eth0.snapshot();
     std::cout << "[" << t << "] score=" << snap.score_smoothed
               << " conf=" << snap.confidence
-              << " status=" << status_str(snap.status) << "\n";
+              << " status=" << to_string(snap.status) << "\n";
   }
 
   return 0;

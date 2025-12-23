@@ -1,0 +1,76 @@
+#include "telemetry_agent.hpp"
+
+#include <algorithm>
+
+namespace telemetry {
+
+TelemetryAgent::TelemetryAgent(AgentConfig cfg) : cfg_(cfg) {}
+
+void TelemetryAgent::ensure_interface(const std::string& iface) {
+  if (trackers_.find(iface) != trackers_.end()) return;
+  trackers_.emplace(iface, InterfaceTracker(iface, cfg_));
+  score_sum_[iface] = 0.0;
+  score_count_[iface] = 0;
+}
+
+void TelemetryAgent::ingest(const std::string& iface, int64_t ts, const Metrics& m) {
+  ensure_interface(iface);
+  auto& tr = trackers_.at(iface);
+  tr.ingest(ts, m);
+
+  if (auto ev = tr.last_transition()) {
+    // Keep only the most recent transition; InterfaceTracker retains last_transition().
+    // We capture it here for "transitions since last print".
+    pending_transitions_.push_back(*ev);
+  }
+}
+
+void TelemetryAgent::note_time(int64_t ts_now) {
+  for (auto& [iface, tr] : trackers_) {
+    tr.note_time(ts_now);
+    if (auto ev = tr.last_transition()) {
+      pending_transitions_.push_back(*ev);
+    }
+  }
+}
+
+std::vector<InterfaceSnapshot> TelemetryAgent::snapshots() const {
+  std::vector<InterfaceSnapshot> out;
+  out.reserve(trackers_.size());
+  for (const auto& [iface, tr] : trackers_) {
+    out.push_back(tr.snapshot());
+  }
+  return out;
+}
+
+std::vector<TransitionEvent> TelemetryAgent::drain_transitions() {
+  auto out = pending_transitions_;
+  pending_transitions_.clear();
+  return out;
+}
+
+void TelemetryAgent::record_tick() {
+  for (const auto& [iface, tr] : trackers_) {
+    auto s = tr.snapshot();
+    score_sum_[iface] += s.score_smoothed;
+    score_count_[iface] += 1;
+  }
+}
+
+TelemetryAgent::RunSummary TelemetryAgent::summary() const {
+  RunSummary rs;
+  rs.ranked.reserve(trackers_.size());
+
+  for (const auto& [iface, tr] : trackers_) {
+    const int n = score_count_.at(iface);
+    const double avg = (n > 0) ? (score_sum_.at(iface) / n) : 0.0;
+    rs.ranked.push_back(RunSummary::IfSummary{iface, avg, tr.snapshot().status});
+  }
+
+  std::sort(rs.ranked.begin(), rs.ranked.end(),
+            [](const auto& a, const auto& b){ return a.avg_score > b.avg_score; });
+
+  return rs;
+}
+
+} // namespace telemetry
