@@ -12,7 +12,7 @@ endif()
 project(telemetry_agent VERSION 1.0.0 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -30,39 +30,41 @@ else()
     add_compile_options($<$<CONFIG:Release>:-march=native>)
 endif()
 
-# Create the RollingWindow library
-add_library(rolling_window STATIC
-    src/rolling_window.cpp
-    src/hysteresis_fsm.cpp
-    include/hysteresis_fsm.hpp
+# Collect all src files into a library
+file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-target_include_directories(rolling_window
+add_library(telemetry_agent STATIC ${SRC_FILES})
+
+target_include_directories(telemetry_agent
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# Create the test executable
-add_executable(test_rolling_window
-    tests/test_rolling_window.cpp
+# Create a test executable for each cpp under tests/
+file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
 )
 
-target_link_libraries(test_rolling_window
-    PRIVATE
-        rolling_window
-)
+set(TEST_TARGETS "")
+foreach(test_src IN LISTS TEST_FILES)
+    get_filename_component(test_name "${test_src}" NAME_WE)
+    add_executable("${test_name}" "${test_src}")
+    target_link_libraries("${test_name}" PRIVATE telemetry_agent)
+    list(APPEND TEST_TARGETS "${test_name}")
+endforeach()
 
 # Enable testing
 enable_testing()
 
-# Add test
-add_test(
-    NAME rolling_window_tests
-    COMMAND test_rolling_window
-)
+# Add tests
+foreach(test_name IN LISTS TEST_TARGETS)
+    add_test(NAME "${test_name}" COMMAND "${test_name}")
+endforeach()
 
 # Optional: Add a custom target to run tests
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_rolling_window
+    DEPENDS ${TEST_TARGETS}
 )
