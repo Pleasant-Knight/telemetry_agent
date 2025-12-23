@@ -240,9 +240,9 @@ ninja test    # or make test
 
 ```bash
 # From build/
-./telemetry_agent --scenario A
-./telemetry_agent --scenario B
-./telemetry_agent --scenario C
+./telemetry_agent_cli --scenario A
+./telemetry_agent_cli --scenario B
+./telemetry_agent_cli --scenario C
 ```
 
 ### Build Options
