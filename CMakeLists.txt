@@ -35,12 +35,19 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
+set(CLI_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/telemetry_agent_cli.cpp")
+list(REMOVE_ITEM SRC_FILES "${CLI_SOURCE}")
+
 add_library(telemetry_agent STATIC ${SRC_FILES})
 
 target_include_directories(telemetry_agent
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# CLI executable
+add_executable(telemetry_agent_cli "${CLI_SOURCE}")
+target_link_libraries(telemetry_agent_cli PRIVATE telemetry_agent)
 
 # Create a test executable for each cpp under tests/
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
