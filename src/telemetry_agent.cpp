@@ -17,10 +17,7 @@ void TelemetryAgent::ingest(const std::string& iface, int64_t ts, const Metrics&
   ensure_interface(iface);
   auto& tr = trackers_.at(iface);
   tr.ingest(ts, m);
-
-  if (auto ev = tr.last_transition()) {
-    // Keep only the most recent transition; InterfaceTracker retains last_transition().
-    // We capture it here for "transitions since last print".
+  if (auto ev = tr.drain_transition()) {
     pending_transitions_.push_back(*ev);
   }
 }
@@ -28,7 +25,7 @@ void TelemetryAgent::ingest(const std::string& iface, int64_t ts, const Metrics&
 void TelemetryAgent::note_time(int64_t ts_now) {
   for (auto& [iface, tr] : trackers_) {
     tr.note_time(ts_now);
-    if (auto ev = tr.last_transition()) {
+    if (auto ev = tr.drain_transition()) {
       pending_transitions_.push_back(*ev);
     }
   }

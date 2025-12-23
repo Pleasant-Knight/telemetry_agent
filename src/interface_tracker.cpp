@@ -18,6 +18,12 @@ double InterfaceTracker::clamp01_(double x) {
   return std::max(0.0, std::min(1.0, x));
 }
 
+std::optional<TransitionEvent> InterfaceTracker::drain_transition() {
+  auto out = last_transition_;
+  last_transition_.reset();   // IMPORTANT: clear so it can’t be emitted again
+  return out;
+}
+
 void InterfaceTracker::ingest(int64_t ts, const Metrics& m) {
   const bool accepted = window_.ingest(ts, m);
   if (!accepted) {
