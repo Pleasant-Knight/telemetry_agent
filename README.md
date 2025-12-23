@@ -37,35 +37,72 @@ This project implements a `RollingWindow` class that maintains a 45-second slidi
 - Ninja (recommended for faster builds)
 
 ### Build Steps
-- counts of valid samples
-
-### Ingest logic (O(1)):
-
 ```bash
-idx = ts % 45
+# Clone and navigate to project
+cd telemetry_agent
 
-If slots[idx].valid and slots[idx].ts != ts, that means we’re overwriting an old second:
+# Create build directory
+mkdir build && cd build
 
-# subtract old metrics from aggregates to create eviction
+# Configure with Ninja (recommended)
+cmake -GNinja ..
 
-If inserting a late sample into an existing slot with same ts, you’re replacing:
+# Or use default make
+cmake ..
 
-subtract old, add new
+# Build
+ninja    # or make
 
-Write new slot + add to aggregates
+# Run tests
+ninja test    # or make test
+./test_rolling_window
 ```
 
-### Compute window stats (O(1))
+### Build Options
+- **Release build** (default): Optimized performance
+- **Debug build**: `cmake -DCMAKE_BUILD_TYPE=Debug ..`
+- **Compiler warnings**: Enabled by default
+
+## Running Tests
+
+The project includes comprehensive unit tests covering:
+- Basic ingest and summary operations
+- Partial window filling and averaging
+- Ring buffer collision handling
+- Out-of-order sample acceptance
+- Too-old sample rejection
+- Time advancement without samples
+
 ```bash
-avg = sum / count
-missing_rate = 1 - count/45
+# Run all tests
+./test_rolling_window
 
-# This avoids any per-tick scan and naturally bounds memory.
+# Expected output:
+Starting RollingWindow tests...
+Test 1: Basic ingest and summary count... PASSED
+Test 2: Fill partial window and check means... PASSED
+Test 3: Overwrite via ring index collision... PASSED
+Test 4: Correction for same timestamp replaces value... PASSED
+Test 5: Out-of-order within window is accepted... PASSED
+Test 6: Too-old sample rejected... PASSED
+All RollingWindow tests passed.
+```
 
-# Late sample handling:
-If ts < latest_ts - 44: discard + log (“outside window”)
-Else insert into its slot; aggregates remain correct.
+## Implementation Details
 
-# Missing sample handling:
-# A missing second just means no valid slot for that second. 
-# Our summary uses count and can optionally penalize missingness.
+### Circular Buffer Design
+- **45 slots** indexed by `timestamp % 45`
+- Each slot stores: `{ts, valid, metrics}`
+- **Collision handling**: Same index can store different timestamps
+- **Eviction**: Automatic when new samples overwrite old slots
+
+### Time Handling
+- **Unix timestamps** (seconds since epoch)
+- **Late samples**: Accepted if within 45-second window
+- **Future samples**: Handled gracefully
+- **Time jumps**: Summary scans full window for correctness
+
+### Performance Characteristics
+- **Space**: O(1) - fixed 45-slot buffer
+- **Time**: O(1) for ingest, O(1) for summary
+- **Memory efficient**: No dynamic allocation during operation
