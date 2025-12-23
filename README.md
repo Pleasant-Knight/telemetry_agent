@@ -8,10 +8,10 @@ This project implements a `RollingWindow` class that maintains a 45-second slidi
 
 **Expanded scope (per take-home):** the rolling window is the foundation for a multi-interface telemetry agent that:
 
-* ingests per-interface measurements continuously
-* computes a normalized health score
-* assigns stable statuses (healthy / degraded / down) without flapping
-* exposes latest per-interface state via CLI (and can be extended to IPC/HTTP)
+* ingests per-interface measurements continuously.
+* computes a normalized health score.
+* assigns stable statuses (healthy / degraded / down) without flapping.
+* exposes latest per-interface state via CLI (and can be extended to IPC/HTTP).
 
 ---
 
@@ -304,12 +304,92 @@ Additional tests validate scenario expectations:
 
 ---
 
+## Failure Modes & Agent Behavior
+
+The telemetry agent was designed to behave predictably under imperfect or adversarial conditions commonly found in embedded networking environments.
+
+### Missing samples
+- **Cause:** temporary sensor failure, interface sleep, CPU pressure
+- **Behavior:** missing samples simply reduce `confidence = count/45`
+- **Effect:** promotion to `Healthy` is gated by confidence; the agent avoids declaring healthy on sparse data
+
+### Late or out-of-order samples
+- **Cause:** scheduling jitter, batching, delayed drivers
+- **Behavior:** samples are accepted if their timestamp falls within the 45-second window
+- **Effect:** aggregates remain correct; samples outside the window are safely ignored
+
+### Noisy or bursty measurements
+- **Cause:** Wi-Fi interference, transient congestion
+- **Behavior:** EWMA smoothing + consecutive evidence requirements
+- **Effect:** short spikes (3–5s) do not cause repeated status toggles (Scenario B)
+
+### Sustained degradation
+- **Cause:** link quality collapse, congestion, RF loss
+- **Behavior:** FSM transitions after sufficient evidence
+- **Effect:** status changes are delayed but deterministic and explainable
+
+### Time jumps or clock irregularities
+- **Cause:** NTP correction, suspend/resume
+- **Behavior:** window summary filters samples by timestamp range
+- **Effect:** stale samples are excluded automatically
+
+### Complete data loss
+- **Cause:** interface unplugged or driver crash
+- **Behavior:** confidence drops toward zero; FSM will converge to `Degraded` or `Down`
+- **Effect:** avoids false healthy state during blind operation
+
+---
+
+## Production Considerations (Hoplynk Device)
+
+This implementation focuses on correctness, determinism, and clarity. For a production Hoplynk router, the following enhancements would be added:
+
+### Watchdogs & liveness
+- Monitor agent heartbeat.
+- Restart on deadlock or prolonged lack of updates.
+- Optional hardware watchdog integration.
+
+### Persistence
+- Persist last known interface state across restarts.
+- Store recent score/history to avoid cold-start misclassification.
+
+### Backpressure & rate limiting
+- Bound ingestion rate per interface.
+- Drop or coalesce samples under load.
+- Protect against misbehaving drivers.
+
+### Concurrency model
+- Separate threads for:
+  - metric collection.
+  - scoring/state updates.
+  - publishing/export.
+- Use lock-free queues or single-writer model per interface.
+
+### IPC / export
+- Replace CLI-only output with:
+  - Unix domain socket or gRPC.
+  - structured JSON/Protobuf.
+- Allow external agents to subscribe to state changes.
+
+### Configuration & tuning
+- Load thresholds/weights from config file.
+- Support per-interface tuning (e.g., satellite vs Wi-Fi).
+
+### Security & isolation
+- Run with least privileges.
+- Validate input ranges defensively.
+- Harden against malformed samples.
+
+### Observability
+- Export internal metrics (FSM counters, confidence).
+- Log transition reasons for post-mortem analysis.
+
+---
+
 ## About
 
 A network router telemetry agent for multiple interfaces. 
 
 ---
-
-If you want, I can also give you a **tight “Writeup” section** (1–2 pages) in the same README that answers the prompt’s design-choice bullets explicitly (per-interface state, rolling window, scoring, flapping prevention, missing/out-of-order), but I kept this update limited to what you asked for.
 
 [1]: https://github.com/Pleasant-Knight/telemetry_agent "GitHub - Pleasant-Knight/telemetry_agent: A network router telemetry agent for multiple interfaces"
