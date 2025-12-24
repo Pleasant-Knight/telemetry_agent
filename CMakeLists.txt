@@ -75,3 +75,20 @@ add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
     DEPENDS ${TEST_TARGETS}
 )
+
+# Create a benchmark executable for each cpp under bench/
+file(GLOB_RECURSE BENCH_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/bench/*.cpp"
+)
+
+set(BENCH_TARGETS "")
+foreach(bench_src IN LISTS BENCH_FILES)
+    get_filename_component(bench_name "${bench_src}" NAME_WE)
+    add_executable("${bench_name}" "${bench_src}")
+    target_link_libraries("${bench_name}" PRIVATE telemetry_agent)
+    list(APPEND BENCH_TARGETS "${bench_name}")
+endforeach()
+
+add_custom_target(run_bench
+    DEPENDS ${BENCH_TARGETS}
+)
