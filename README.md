@@ -262,14 +262,13 @@ ninja test    # or make test
 ```bash
 # From build/
 cmake --build . --target benchmark_scenarios
-./benchmark_scenarios # runs all scenarios in two scoring modes
+./benchmark_scenarios # runs all scenarios in two scoring modes.
 ./benchmark_scenarios --scenario A
 ./benchmark_scenarios --scenario D --seconds 300 --runs 3
 ./benchmark_scenarios --scenario B --missing --late
 ```
 
 ### Build Options
-
 * **Release build** (default): Optimized performance
 * **Debug build**: `cmake -DCMAKE_BUILD_TYPE=Debug ..`
 * **Compiler warnings**: Enabled by default 
@@ -277,11 +276,8 @@ cmake --build . --target benchmark_scenarios
 ---
 
 ## Running Tests
-
 ### RollingWindow tests
-
 The project includes unit tests covering:
-
 * Basic ingest and summary operations
 * Partial window filling and averaging
 * Ring buffer collision handling
@@ -304,23 +300,19 @@ Additional tests validate scenario expectations:
 ---
 
 ## Implementation Details
-
 ### Circular Buffer Design
-
 * **45 slots** indexed by `timestamp % 45`
 * Each slot stores: `{ts, valid, metrics}`
 * **Collision handling**: Same index can store different timestamps
 * **Eviction**: Automatic when new samples overwrite old slots 
 
 ### Time Handling
-
 * **Unix timestamps** (seconds since epoch)
 * **Late samples**: Accepted if within 45-second window
 * **Future samples**: Handled gracefully
 * **Time jumps**: Summary scans full window for correctness 
 
 ### Performance Characteristics
-
 * **Space**: O(1) - fixed 45-slot buffer
 * **Time**: O(1) ingest; O(1) summary (fixed 45-slot scan)
 * **Memory efficient**: No dynamic allocation during operation 
@@ -328,7 +320,6 @@ Additional tests validate scenario expectations:
 ---
 
 ## Failure Modes & Agent Behavior
-
 The telemetry agent was designed to behave predictably under imperfect or adversarial conditions commonly found in embedded networking environments.
 
 ### Missing samples
@@ -379,14 +370,4 @@ This implementation focuses on correctness, determinism, and clarity. For a prod
 * per-interface tuning
 * observability metrics
 * security hardening
-
-
 ---
-
-## About
-
-A network router telemetry agent for multiple interfaces. 
-
----
-
-[1]: https://github.com/Pleasant-Knight/telemetry_agent "GitHub - Pleasant-Knight/telemetry_agent: A network router telemetry agent for multiple interfaces"
