@@ -23,7 +23,8 @@ static ScenarioId parse_scenario(const std::string& s) {
   if (s == "A" || s == "a") return ScenarioId::A;
   if (s == "B" || s == "b") return ScenarioId::B;
   if (s == "C" || s == "c") return ScenarioId::C;
-  std::cerr << "Unknown scenario: " << s << " (use A|B|C)\n";
+  if (s == "D" || s == "d") return ScenarioId::D;
+  std::cerr << "Unknown scenario: " << s << " (use A|B|C|D)\n";
   std::exit(2);
 }
 
@@ -62,7 +63,7 @@ static void print_table(int64_t t, const std::vector<InterfaceSnapshot>& snaps) 
 }
 
 int main(int argc, char** argv) {
-  std::printf("Minimal CLI: telemetry_agent_cli run --scenario A|B|C\n");
+  std::printf("Minimal CLI: telemetry_agent_cli run --scenario A|B|C|D\n");
   std::string scenario_arg;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -71,7 +72,7 @@ int main(int argc, char** argv) {
     }
   }
   if (scenario_arg.empty()) {
-    std::cerr << "Usage: telemetry_agent_cli run --scenario A|B|C\n";
+    std::cerr << "Usage: telemetry_agent_cli run --scenario A|B|C|D\n";
     return 2;
   }
 

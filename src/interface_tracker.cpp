@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace telemetry {
 
@@ -27,7 +28,7 @@ std::optional<TransitionEvent> InterfaceTracker::drain_transition() {
 void InterfaceTracker::ingest(int64_t ts, const Metrics& m) {
   const bool accepted = window_.ingest(ts, m);
   if (!accepted) {
-    // Too old: ignore silently, or log in your integration layer.
+    std::cerr << "Dropping too-old sample for " << iface_ << " at ts=" << ts << "\n";
     return;
   }
   // Recompute using the current notion of newest time inside window_.

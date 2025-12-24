@@ -14,19 +14,30 @@ double ScenarioGenerator::lerp(double a, double b, double u) {
 
 std::optional<ScenarioGenerator::Generated>
 ScenarioGenerator::sample(const std::string& iface, int64_t t) const {
-  // Deterministic missing
-  if (imp_.enable_missing && imp_.drop_every_n > 0) {
-    // Drop pattern depends on iface to avoid synchronized drops
-    const int salt = int(iface.size());
-    if (((t + salt) % imp_.drop_every_n) == 0) return std::nullopt;
-  }
-
   int64_t out_ts = t;
 
-  // Deterministic late arrival (timestamp older than latest)
-  if (imp_.enable_late && imp_.late_every_n > 0) {
-    const int salt = int(iface[0]);
-    if (((t + salt) % imp_.late_every_n) == 0) out_ts = t - imp_.late_by_sec;
+  if (id_ == ScenarioId::D) {
+    // Scenario D imperfection rules (deterministic):
+    // wifi0: ~5% missing samples, sat0: ~2% late samples.
+    if (iface == "wifi0") {
+      if ((t % 20) == 0) return std::nullopt;
+    }
+    if (iface == "sat0") {
+      if ((t % 50) == 0) out_ts = t - 2;
+    }
+  } else {
+    // Deterministic missing
+    if (imp_.enable_missing && imp_.drop_every_n > 0) {
+      // Drop pattern depends on iface to avoid synchronized drops
+      const int salt = int(iface.size());
+      if (((t + salt) % imp_.drop_every_n) == 0) return std::nullopt;
+    }
+
+    // Deterministic late arrival (timestamp older than latest)
+    if (imp_.enable_late && imp_.late_every_n > 0) {
+      const int salt = int(iface[0]);
+      if (((t + salt) % imp_.late_every_n) == 0) out_ts = t - imp_.late_by_sec;
+    }
   }
 
   Metrics m{};

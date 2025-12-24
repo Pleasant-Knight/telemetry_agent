@@ -181,13 +181,14 @@ Based on observed “good wifi” scores in scenarios, a practical default is:
 
 ---
 
-## Scenarios (A/B/C) and Expected Behavior
+## Scenarios (A/B/C/D) and Expected Behavior
 
-The CLI runner supports three deterministic scenarios (90 seconds, 1 Hz, 4 interfaces: `eth0`, `wifi0`, `lte0`, `sat0`):
+The CLI runner supports deterministic scenarios (90 seconds, 1 Hz, 4 interfaces: `eth0`, `wifi0`, `lte0`, `sat0`):
 
 * **Scenario A:** `wifi0` gradually degrades then recovers; status should change with hysteresis and not instantly.
 * **Scenario B:** `wifi0` experiences 3–5s spikes every ~15s; status should *not* flap repeatedly.
 * **Scenario C:** `lte0` has high throughput but sustained loss/jitter; scoring should rank a cleaner `wifi0` above it.
+* **Scenario D:** `wifi0` drops ~5% of samples and `sat0` receives ~2% late samples; late samples inside the 45-second window are accepted, too-old samples are discarded with a log.
 
 At end of run, the CLI prints a ranking by average score.
 
@@ -243,6 +244,17 @@ ninja test    # or make test
 ./telemetry_agent_cli --scenario A
 ./telemetry_agent_cli --scenario B
 ./telemetry_agent_cli --scenario C
+./telemetry_agent_cli --scenario D
+```
+
+### Benchmarks
+
+```bash
+# From build/
+cmake --build . --target benchmark_scenarios
+./benchmark_scenarios --scenario A
+./benchmark_scenarios --scenario D --seconds 300 --runs 3
+./benchmark_scenarios --scenario B --missing --late
 ```
 
 ### Build Options

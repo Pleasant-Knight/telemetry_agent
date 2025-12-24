@@ -56,7 +56,7 @@ int main() {
     // Advance time even if some samples are missing.
     agent.note_time(t);
 
-    // Ingest samples for each iface; some are missing; some are late (ts=t-2).
+    // Ingest samples for each iface; some are missing; some are late (ts = t - 2).
     for (const auto& iface : ifaces) {
       auto g = gen.sample(iface, t);
       if (!g) {
