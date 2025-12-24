@@ -1,4 +1,4 @@
-# Telemetry Agent - Rolling Window Implementation
+# Telemetry Agent for Multi Interface Router in C++20
 
 A C++ implementation of a rolling window data structure for network telemetry metrics, following deep module design principles.
 
@@ -60,12 +60,10 @@ In this repo, the complexity is pushed down into a few modules that each do one 
 * **O(1) ingest** and **O(1) summary** operations (fixed 45-slot scan).
 * **Thread-safe design** (single-threaded usage assumed) .
 
-> Note on “avoid rescanning”: summary scans a fixed 45-slot buffer (constant time, tiny constant). This keeps correctness simple under missing/out-of-order/time jumps. If we later increase sampling rate/window size, this can be upgraded to running aggregates with explicit eviction.
 
 ---
 
 ### InterfaceTracker (deep module per interface)
-
 **Responsibility:** turn samples into a stable per-interface state.
 Pipeline:
 
@@ -77,16 +75,13 @@ Pipeline:
 6. Expose `InterfaceSnapshot` to callers
 
 Outputs:
-
 * `InterfaceSnapshot` {score, status, confidence, means}
 * `TransitionEvent` (edge-triggered) with a reason string
 
 ---
 
 ### HysteresisFsm (anti-flapping finite state machine)
-
 Converts a noisy score stream into stable states using:
-
 * **Hysteresis thresholds** (enter threshold differs from exit threshold)
 * **Consecutive evidence** (must be above/below threshold for N ticks)
 * Optional **minimum dwell** time between transitions
@@ -127,47 +122,67 @@ Owns `std::unordered_map<std::string, InterfaceTracker>` and provides:
 
 ---
 
-## Default Scoring & FSM Parameters (Recommended)
+### Scoring Model
 
-These are *recommended starting defaults* that align with scenario intent and avoid common pitfalls (Scenario B flapping; Scenario A recovery).
+Metrics are normalized to `[0,1]` and combined via a weighted sum over the **current 45-second window averages**.
 
-### Score normalization (ranges)
+#### Normalization Ranges
 
-* throughput: 0..200 Mbps (higher is better)
-* RTT: 10..800 ms (lower is better)
-* loss: 0..30% (lower is better)
-* jitter: 0..200 ms (lower is better)
+* Throughput: `0–200 Mbps` (higher is better)
+* RTT: `10–800 ms` (lower is better)
+* Loss: `0–30 %` (lower is better)
+* Jitter: `0–200 ms` (lower is better)
 
-### Score weights (sum to 1.0)
+#### Weights
 
-Recommended:
+| Metric     | Weight |
+| ---------- | ------ |
+| Loss       | 0.30   |
+| RTT        | 0.25   |
+| Throughput | 0.25   |
+| Jitter     | 0.20   |
 
-* `w_loss = 0.30`
-* `w_rtt  = 0.25`
-* `w_tp   = 0.25`
-* `w_jit  = 0.20`
+Quality metrics dominate throughput to avoid misleading high-throughput / poor-quality links.
+---
+### Two Scoring Strategies
+A single boolean selects the strategy:
 
-Rationale:
+```cpp
+useEwma = false | true
+```
+Both scores are always computed; the flag selects which one drives the FSM.
+---
 
-* Throughput alone can mislead (Scenario C), so quality (loss/jitter/RTT) should dominate.
+#### Strategy 1 — Window-Average Score (Baseline)
+**Enabled:** `useEwma = false`
+* Uses the normalized weighted score directly
+* Highly responsive
+* More sensitive to short spikes
+**Best for:** debugging, baseline comparison
+---
 
-### EWMA
+#### Strategy 2 — EWMA Trend-Aware Score (Default / Bonus)
+**Enabled:** `useEwma = true`
+* Applies EWMA over the window-average score
+* Optional downward-trend penalty biases against sudden drops
+* Significantly reduces flapping
 
-* `ewma_alpha = 0.20–0.25` (1 Hz sampling)
+**Best for:** production, wireless and satellite links
 
-Lower alpha = smoother (less reactive to spikes), higher alpha = more responsive.
+```cpp
+score_used = useEwma ? score_ewma : score_avg;
+```
+---
 
 ### Hysteresis thresholds (tuned to this score scale)
 
 Based on observed “good wifi” scores in scenarios, a practical default is:
-
 * `healthy_enter = 0.72`
 * `healthy_exit  = 0.66`
 * `down_enter    = 0.35`
 * `down_exit     = 0.45`
 
 ### Evidence + dwell
-
 * `healthy_enter_N = 6–8` (conservative promotion)
 * `healthy_exit_N  = 5–6` (avoid reacting to 3–5s spikes)
 * `down_enter_N    = 3` (drop quickly if truly bad)
@@ -175,14 +190,12 @@ Based on observed “good wifi” scores in scenarios, a practical default is:
 * `min_dwell_sec   = 5–10`
 
 ### Confidence gating
-
 * `min_confidence_for_promotion = 0.60`
 * Optional confidence cap: if confidence < 0.60, cap score at ~0.70 to avoid declaring Healthy on sparse data.
 
 ---
 
 ## Scenarios (A/B/C/D) and Expected Behavior
-
 The CLI runner supports deterministic scenarios (90 seconds, 1 Hz, 4 interfaces: `eth0`, `wifi0`, `lte0`, `sat0`):
 
 * **Scenario A:** `wifi0` gradually degrades then recovers; status should change with hysteresis and not instantly.
@@ -195,9 +208,7 @@ At end of run, the CLI prints a ranking by average score.
 ---
 
 ## CLI Output (Operator View)
-
 The CLI prints a table per tick with per-interface:
-
 * status
 * smoothed score
 * confidence
@@ -207,11 +218,10 @@ The CLI prints a table per tick with per-interface:
 ---
 
 ## Building the Project
-
 ### Prerequisites
 
 * CMake 3.16+
-* C++17 compatible compiler (GCC 7+, Clang 5+, MSVC 2017+)
+* C++20 compatible compiler
 * Ninja (recommended for faster builds)
 
 ### Build Steps
@@ -252,6 +262,7 @@ ninja test    # or make test
 ```bash
 # From build/
 cmake --build . --target benchmark_scenarios
+./benchmark_scenarios # runs all scenarios in two scoring modes
 ./benchmark_scenarios --scenario A
 ./benchmark_scenarios --scenario D --seconds 300 --runs 3
 ./benchmark_scenarios --scenario B --missing --late
@@ -283,13 +294,12 @@ The project includes unit tests covering:
 ```
 
 ### Scenario tests (agent-level)
-
 Additional tests validate scenario expectations:
 
 * **Scenario B no-flap:** ensure `wifi0` doesn’t toggle repeatedly under periodic spikes.
 * **Scenario A degrade/recover:** ensure `wifi0` eventually recovers (with thresholds aligned to score scale).
 
-> Testing note: transitions must be edge-triggered (use drain semantics) so tests count true transitions, not repeated “last transition” reporting.
+> **Testing note**: transitions must be edge-triggered (use drain semantics) so tests count true transitions, not repeated “last transition” reporting.
 
 ---
 
@@ -354,48 +364,22 @@ The telemetry agent was designed to behave predictably under imperfect or advers
 ---
 
 ## Production Considerations (Hoplynk Device)
-
 This implementation focuses on correctness, determinism, and clarity. For a production Hoplynk router, the following enhancements would be added:
 
-### Watchdogs & liveness
-- Monitor agent heartbeat.
-- Restart on deadlock or prolonged lack of updates.
-- Optional hardware watchdog integration.
+**Must-have**
+* watchdog & liveness monitoring
+* ingestion backpressure
+* state persistence across restarts
 
-### Persistence
-- Persist last known interface state across restarts.
-- Store recent score/history to avoid cold-start misclassification.
+**Next**
+* multi-threaded pipeline (collect → score → publish)
+* structured IPC (socket / gRPC)
 
-### Backpressure & rate limiting
-- Bound ingestion rate per interface.
-- Drop or coalesce samples under load.
-- Protect against misbehaving drivers.
+**Later**
+* per-interface tuning
+* observability metrics
+* security hardening
 
-### Concurrency model
-- Separate threads for:
-  - metric collection.
-  - scoring/state updates.
-  - publishing/export.
-- Use lock-free queues or single-writer model per interface.
-
-### IPC / export
-- Replace CLI-only output with:
-  - Unix domain socket or gRPC.
-  - structured JSON/Protobuf.
-- Allow external agents to subscribe to state changes.
-
-### Configuration & tuning
-- Load thresholds/weights from config file.
-- Support per-interface tuning (e.g., satellite vs Wi-Fi).
-
-### Security & isolation
-- Run with least privileges.
-- Validate input ranges defensively.
-- Harden against malformed samples.
-
-### Observability
-- Export internal metrics (FSM counters, confidence).
-- Log transition reasons for post-mortem analysis.
 
 ---
 
