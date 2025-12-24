@@ -1,8 +1,16 @@
 // Simple benchmark for TelemetryAgent + ScenarioGenerator.
+//
+// Default behavior:
+//   - run scenarios A, B, C, D
+//   - for each scenario, run twice: useEwma=false then useEwma=true
+//   - print a compact comparison table
+//
+// You can still benchmark a single scenario via: --scenario A|B|C|D
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -13,6 +21,7 @@
 using namespace telemetry;
 
 struct Options {
+  bool run_all = true;
   ScenarioId scenario = ScenarioId::A;
   int seconds = 90;
   int runs = 5;
@@ -28,15 +37,15 @@ static ScenarioId parse_scenario(const std::string& s) {
   if (s == "B" || s == "b") return ScenarioId::B;
   if (s == "C" || s == "c") return ScenarioId::C;
   if (s == "D" || s == "d") return ScenarioId::D;
-  std::cerr << "Unknown scenario: " << s << " (use A|B|C|D)\n";
+  std::cerr << "Unknown scenario: " << s << "\n";
   std::exit(2);
 }
 
-static int parse_int(const std::string& s, const char* name) {
+static int parse_int(const char* s, const char* flag) {
   try {
     return std::stoi(s);
   } catch (...) {
-    std::cerr << "Invalid integer for " << name << ": " << s << "\n";
+    std::cerr << "Invalid int for " << flag << ": " << s << "\n";
     std::exit(2);
   }
 }
@@ -44,9 +53,10 @@ static int parse_int(const std::string& s, const char* name) {
 static Options parse_args(int argc, char** argv) {
   Options opt;
   for (int i = 1; i < argc; ++i) {
-    std::string a = argv[i];
+    const std::string a = argv[i];
     if (a == "--scenario" && i + 1 < argc) {
       opt.scenario = parse_scenario(argv[++i]);
+      opt.run_all = false; // explicit scenario overrides default all
     } else if (a == "--seconds" && i + 1 < argc) {
       opt.seconds = parse_int(argv[++i], "--seconds");
     } else if (a == "--runs" && i + 1 < argc) {
@@ -62,9 +72,11 @@ static Options parse_args(int argc, char** argv) {
     } else if (a == "--late-by" && i + 1 < argc) {
       opt.late_by_sec = parse_int(argv[++i], "--late-by");
     } else if (a == "--help" || a == "-h") {
-      std::cout << "Usage: benchmark_scenarios [--scenario A|B|C|D] [--seconds N] [--runs N]\n"
-                << "                           [--missing] [--late]\n"
-                << "                           [--drop-every N] [--late-every N] [--late-by N]\n";
+      std::cout
+        << "Usage: benchmark_scenarios [--scenario A|B|C|D] [--seconds N] [--runs N]\n"
+        << "                           [--missing] [--late]\n"
+        << "                           [--drop-every N] [--late-every N] [--late-by N]\n\n"
+        << "Default: runs scenarios A,B,C,D and prints a comparison table for useEwma=false/true.\n";
       std::exit(0);
     } else {
       std::cerr << "Unknown arg: " << a << "\n";
@@ -74,45 +86,56 @@ static Options parse_args(int argc, char** argv) {
   return opt;
 }
 
-int main(int argc, char** argv) {
-  const Options opt = parse_args(argc, argv);
+struct BenchResult {
+  ScenarioId scenario{};
+  bool useEwma = true;
+  int runs = 0;
+  int seconds = 0;
+  bool missing = false;
+  bool late = false;
 
-  AgentConfig base_cfg;
-  base_cfg.score.ewma_alpha = 0.25;
-  base_cfg.score.useEwma = true;
-  base_cfg.fsm.healthy_enter = 0.78;
-  base_cfg.fsm.healthy_exit  = 0.70;
-  base_cfg.fsm.down_enter    = 0.35;
-  base_cfg.fsm.down_exit     = 0.45;
-  base_cfg.fsm.healthy_enter_N = 8;
-  base_cfg.fsm.healthy_exit_N  = 5;
-  base_cfg.fsm.down_enter_N    = 3;
-  base_cfg.fsm.down_exit_N     = 5;
-  base_cfg.fsm.min_dwell_sec   = 5;
+  int64_t total_ingests = 0;
+  std::chrono::duration<double> total_time{0};
 
+  double avg_time_s() const {
+    return total_time.count() / std::max(1, runs);
+  }
+  double ingests_per_s() const {
+    return (total_time.count() > 0.0) ? (double)total_ingests / total_time.count() : 0.0;
+  }
+  double avg_time_ms() const {
+    return avg_time_s() * 1000.0;
+  }
+};
+
+static BenchResult bench_one_scenario(const Options& opt, ScenarioId sid, bool useEwma, const AgentConfig& base_cfg) {
   const std::vector<std::string> ifaces = {"eth0", "wifi0", "lte0", "sat0"};
 
-  auto bench_one = [&](bool useEwma) {
-    AgentConfig cfg = base_cfg;
-    cfg.score.useEwma = useEwma;
+  AgentConfig cfg = base_cfg;
+  cfg.score.useEwma = useEwma;
 
-    int64_t total_ingests = 0;
-    std::chrono::duration<double> total_time{0};
+  BenchResult out;
+  out.scenario = sid;
+  out.useEwma = useEwma;
+  out.runs = opt.runs;
+  out.seconds = opt.seconds;
+  out.missing = opt.missing;
+  out.late = opt.late;
 
-    for (int run = 0; run < opt.runs; ++run) {
-      TelemetryAgent agent(cfg);
-      for (const auto& iface : ifaces) {
-        agent.ensure_interface(iface);
-      }
+  ImperfectDataConfig imp{};
+  imp.enable_missing = opt.missing;
+  imp.enable_late = opt.late;
+  imp.drop_every_n = opt.drop_every_n;
+  imp.late_every_n = opt.late_every_n;
+  imp.late_by_sec = opt.late_by_sec;
 
-    ImperfectDataConfig imp{};
-    imp.enable_missing = opt.missing;
-    imp.enable_late = opt.late;
-    imp.drop_every_n = opt.drop_every_n;
-    imp.late_every_n = opt.late_every_n;
-    imp.late_by_sec = opt.late_by_sec;
+  for (int run = 0; run < opt.runs; ++run) {
+    TelemetryAgent agent(cfg);
+    for (const auto& iface : ifaces) {
+      agent.ensure_interface(iface);
+    }
 
-    ScenarioGenerator gen(opt.scenario, imp);
+    ScenarioGenerator gen(sid, imp);
 
     const auto start = std::chrono::steady_clock::now();
     int64_t ingests = 0;
@@ -128,32 +151,81 @@ int main(int argc, char** argv) {
       agent.record_tick();
     }
 
-      const auto end = std::chrono::steady_clock::now();
-      total_time += (end - start);
-      total_ingests += ingests;
-    }
+    const auto end = std::chrono::steady_clock::now();
+    out.total_time += (end - start);
+    out.total_ingests += ingests;
+  }
 
-    const double avg_sec = total_time.count() / std::max(1, opt.runs);
-    const double ingests_per_sec = (total_time.count() > 0.0)
-      ? (double)total_ingests / total_time.count()
-      : 0.0;
+  return out;
+}
 
-    std::cout << "benchmark_scenarios (useEwma=" << (useEwma ? "true" : "false") << ")\n";
-    std::cout << "  runs=" << opt.runs
-              << " seconds=" << opt.seconds
-              << " missing=" << (opt.missing ? "true" : "false")
-              << " late=" << (opt.late ? "true" : "false")
-              << "\n";
-    std::cout << "  total_time_s=" << total_time.count()
-              << " avg_time_s=" << avg_sec
-              << " total_ingests=" << total_ingests
-              << " ingests_per_s=" << ingests_per_sec
-              << "\n\n";
-  };
+static void print_table_header(const Options& opt) {
+  std::cout << "benchmark_scenarios\n";
+  std::cout << "  runs=" << opt.runs
+            << " seconds=" << opt.seconds
+            << " missing=" << (opt.missing ? "true" : "false")
+            << " late=" << (opt.late ? "true" : "false");
+  if (opt.missing) std::cout << " drop_every=" << opt.drop_every_n;
+  if (opt.late) std::cout << " late_every=" << opt.late_every_n << " late_by=" << opt.late_by_sec;
+  std::cout << "\n\n";
 
-  // Run both strategies back-to-back for apples-to-apples comparison.
-  bench_one(false);
-  bench_one(true);
+  std::cout << std::left
+            << std::setw(9)  << "scenario"
+            << std::setw(10) << "useEwma"
+            << std::setw(14) << "avg_ms/run"
+            << std::setw(16) << "total_ingests"
+            << std::setw(14) << "ingests/s"
+            << "\n";
+  std::cout << std::string(63, '-') << "\n";
+}
 
+static void print_row(const BenchResult& r) {
+  std::cout << std::left
+            << std::setw(9)  << scenario_name(r.scenario)
+            << std::setw(10) << (r.useEwma ? "true" : "false")
+            << std::setw(14) << std::fixed << std::setprecision(3) << r.avg_time_ms()
+            << std::setw(16) << r.total_ingests
+            << std::setw(14) << std::fixed << std::setprecision(0) << r.ingests_per_s()
+            << "\n";
+}
+
+int main(int argc, char** argv) {
+  const Options opt = parse_args(argc, argv);
+
+  AgentConfig base_cfg;
+  base_cfg.score.ewma_alpha = 0.25;
+  base_cfg.score.useEwma = true; // default strategy if run standalone
+  base_cfg.fsm.healthy_enter = 0.78;
+  base_cfg.fsm.healthy_exit  = 0.70;
+  base_cfg.fsm.down_enter    = 0.35;
+  base_cfg.fsm.down_exit     = 0.45;
+  base_cfg.fsm.healthy_enter_N = 8;
+  base_cfg.fsm.healthy_exit_N  = 5;
+  base_cfg.fsm.down_enter_N    = 3;
+  base_cfg.fsm.down_exit_N     = 5;
+  base_cfg.fsm.min_dwell_sec   = 5;
+
+  std::vector<ScenarioId> scenarios;
+  if (opt.run_all) {
+    scenarios = {ScenarioId::A, ScenarioId::B, ScenarioId::C, ScenarioId::D};
+  } else {
+    scenarios = {opt.scenario};
+  }
+
+  print_table_header(opt);
+
+  // For each scenario, run both strategies back-to-back for apples-to-apples comparison.
+  for (auto sid : scenarios) {
+    BenchResult r_raw  = bench_one_scenario(opt, sid, false, base_cfg);
+    BenchResult r_ewma = bench_one_scenario(opt, sid, true,  base_cfg);
+
+    print_row(r_raw);
+    print_row(r_ewma);
+  }
+
+  std::cout << "\nLegend:\n"
+            << "  avg_ms/run = average wall time per run (lower is faster)\n"
+            << "  total_ingests = total number of agent.ingest() calls across all runs\n"
+            << "  ingests/s = total_ingests / total_wall_time\n";
   return 0;
 }

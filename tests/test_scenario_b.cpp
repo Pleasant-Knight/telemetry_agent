@@ -1,5 +1,5 @@
 #include <cassert>
-#include <cstdio>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -8,52 +8,61 @@
 
 using namespace telemetry;
 
-static int count_transitions(const std::vector<TransitionEvent>& evs,
-                             const std::string& iface) {
-  int c = 0;
-  for (const auto& e : evs) if (e.iface == iface) c++;
-  return c;
+static AgentConfig cfg_for(bool useEwma) {
+  AgentConfig cfg;
+  cfg.score.useEwma = useEwma;
+  cfg.score.ewma_alpha = 0.25;
+  cfg.score.enable_downtrend_penalty = false;
+
+  cfg.fsm.healthy_enter = 0.72;
+  cfg.fsm.healthy_exit  = 0.66;
+  cfg.fsm.down_enter    = 0.35;
+  cfg.fsm.down_exit     = 0.45;
+  cfg.fsm.healthy_enter_N = 6;
+  cfg.fsm.healthy_exit_N  = 6;
+  cfg.fsm.down_enter_N    = 3;
+  cfg.fsm.down_exit_N     = 5;
+  cfg.fsm.min_dwell_sec   = 5;
+  return cfg;
+}
+
+static int count_iface(const std::vector<TransitionEvent>& evs, const std::string& iface) {
+  int c=0; for (auto& e: evs) if (e.iface==iface) c++; return c;
 }
 
 int main() {
-  AgentConfig cfg;
-  cfg.score.ewma_alpha = 0.25;
+  const std::vector<std::string> ifaces = {"eth0","wifi0","lte0","sat0"};
 
-  // Make hysteresis strong enough that 3–5s spikes don't trigger repeated toggles. :contentReference[oaicite:17]{index=17}
-  cfg.fsm.healthy_enter = 0.78;
-  cfg.fsm.healthy_exit  = 0.70;
-  cfg.fsm.down_enter    = 0.35;
-  cfg.fsm.down_exit     = 0.45;
+  int raw_trans = 0;
+  int ewma_trans = 0;
 
-  cfg.fsm.healthy_exit_N  = 6;   // require sustained evidence to degrade
-  cfg.fsm.healthy_enter_N = 8;   // conservative promotion
-  cfg.fsm.min_dwell_sec   = 5;
+  for (bool useEwma : {false, true}) {
+    TelemetryAgent agent(cfg_for(useEwma));
+    for (auto& i : ifaces) agent.ensure_interface(i);
+    ScenarioGenerator gen(ScenarioId::B);
 
-  TelemetryAgent agent(cfg);
-  const std::vector<std::string> ifaces = {"eth0", "wifi0", "lte0", "sat0"};
-  for (auto& i : ifaces) agent.ensure_interface(i);
+    int transitions = 0;
 
-  ScenarioGenerator gen(ScenarioId::B);
-
-  int wifi_transitions_total = 0;
-
-  for (int64_t t = 0; t < 90; ++t) {
-    agent.note_time(t);
-
-    for (const auto& iface : ifaces) {
-      auto g = gen.sample(iface, t);
-      if (!g) continue;
-      agent.ingest(iface, g->ts, g->m);
+    for (int64_t t=0; t<180; ++t) {
+      agent.note_time(t);
+      for (auto& iface : ifaces) {
+        auto g = gen.sample(iface, t);
+        if (!g) continue;
+        agent.ingest(iface, g->ts, g->m);
+      }
+      transitions += count_iface(agent.drain_transitions(), "wifi0");
+      agent.record_tick();
     }
 
-    auto evs = agent.drain_transitions();
-    wifi_transitions_total += count_transitions(evs, "wifi0");
+    if (useEwma) ewma_trans = transitions;
+    else raw_trans = transitions;
   }
 
-  // Under a good design, wifi0 should not flap repeatedly. :contentReference[oaicite:18]{index=18}
-  // We allow <= 1 transition (some designs may degrade once and stay there, or remain healthy).
-  std::printf("wifi0 transitions total: %d\n", wifi_transitions_total);
-  assert(wifi_transitions_total <= 4);
+  // EWMA should reduce flapping relative to raw.
+  assert(ewma_trans <= raw_trans);
+  // In EWMA mode, we expect only a few transitions at most.
+  assert(ewma_trans <= 6);
 
+  std::cout << "test_scenario_b OK (raw=" << raw_trans << ", ewma=" << ewma_trans << ")\n";
   return 0;
 }
