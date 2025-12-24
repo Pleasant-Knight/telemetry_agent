@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -76,27 +77,33 @@ static Options parse_args(int argc, char** argv) {
 int main(int argc, char** argv) {
   const Options opt = parse_args(argc, argv);
 
-  AgentConfig cfg;
-  cfg.score.ewma_alpha = 0.25;
-  cfg.fsm.healthy_enter = 0.78;
-  cfg.fsm.healthy_exit  = 0.70;
-  cfg.fsm.down_enter    = 0.35;
-  cfg.fsm.down_exit     = 0.45;
-  cfg.fsm.healthy_enter_N = 8;
-  cfg.fsm.healthy_exit_N  = 5;
-  cfg.fsm.down_enter_N    = 3;
-  cfg.fsm.down_exit_N     = 5;
-  cfg.fsm.min_dwell_sec   = 5;
+  AgentConfig base_cfg;
+  base_cfg.score.ewma_alpha = 0.25;
+  base_cfg.score.useEwma = true;
+  base_cfg.fsm.healthy_enter = 0.78;
+  base_cfg.fsm.healthy_exit  = 0.70;
+  base_cfg.fsm.down_enter    = 0.35;
+  base_cfg.fsm.down_exit     = 0.45;
+  base_cfg.fsm.healthy_enter_N = 8;
+  base_cfg.fsm.healthy_exit_N  = 5;
+  base_cfg.fsm.down_enter_N    = 3;
+  base_cfg.fsm.down_exit_N     = 5;
+  base_cfg.fsm.min_dwell_sec   = 5;
 
   const std::vector<std::string> ifaces = {"eth0", "wifi0", "lte0", "sat0"};
-  int64_t total_ingests = 0;
-  std::chrono::duration<double> total_time{0};
 
-  for (int run = 0; run < opt.runs; ++run) {
-    TelemetryAgent agent(cfg);
-    for (const auto& iface : ifaces) {
-      agent.ensure_interface(iface);
-    }
+  auto bench_one = [&](bool useEwma) {
+    AgentConfig cfg = base_cfg;
+    cfg.score.useEwma = useEwma;
+
+    int64_t total_ingests = 0;
+    std::chrono::duration<double> total_time{0};
+
+    for (int run = 0; run < opt.runs; ++run) {
+      TelemetryAgent agent(cfg);
+      for (const auto& iface : ifaces) {
+        agent.ensure_interface(iface);
+      }
 
     ImperfectDataConfig imp{};
     imp.enable_missing = opt.missing;
@@ -121,27 +128,32 @@ int main(int argc, char** argv) {
       agent.record_tick();
     }
 
-    const auto end = std::chrono::steady_clock::now();
-    total_time += (end - start);
-    total_ingests += ingests;
-  }
+      const auto end = std::chrono::steady_clock::now();
+      total_time += (end - start);
+      total_ingests += ingests;
+    }
 
-  const double avg_sec = total_time.count() / std::max(1, opt.runs);
-  const double ingests_per_sec = (total_time.count() > 0.0)
-    ? (double)total_ingests / total_time.count()
-    : 0.0;
+    const double avg_sec = total_time.count() / std::max(1, opt.runs);
+    const double ingests_per_sec = (total_time.count() > 0.0)
+      ? (double)total_ingests / total_time.count()
+      : 0.0;
 
-  std::cout << "benchmark_scenarios\n";
-  std::cout << "  runs=" << opt.runs
-            << " seconds=" << opt.seconds
-            << " missing=" << (opt.missing ? "true" : "false")
-            << " late=" << (opt.late ? "true" : "false")
-            << "\n";
-  std::cout << "  total_time_s=" << total_time.count()
-            << " avg_time_s=" << avg_sec
-            << " total_ingests=" << total_ingests
-            << " ingests_per_s=" << ingests_per_sec
-            << "\n";
+    std::cout << "benchmark_scenarios (useEwma=" << (useEwma ? "true" : "false") << ")\n";
+    std::cout << "  runs=" << opt.runs
+              << " seconds=" << opt.seconds
+              << " missing=" << (opt.missing ? "true" : "false")
+              << " late=" << (opt.late ? "true" : "false")
+              << "\n";
+    std::cout << "  total_time_s=" << total_time.count()
+              << " avg_time_s=" << avg_sec
+              << " total_ingests=" << total_ingests
+              << " ingests_per_s=" << ingests_per_sec
+              << "\n\n";
+  };
+
+  // Run both strategies back-to-back for apples-to-apples comparison.
+  bench_one(false);
+  bench_one(true);
 
   return 0;
 }

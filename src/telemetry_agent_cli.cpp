@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstdio>
+#include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -52,13 +53,56 @@ static void print_table(int64_t t, const std::vector<InterfaceSnapshot>& snaps) 
     std::cout << std::left
               << std::setw(6)  << s.iface
               << std::setw(8)  << status_str(s.status)
-              << std::setw(8)  << std::fixed << std::setprecision(3) << s.score_smoothed
+              << std::setw(8)  << std::fixed << std::setprecision(3) << s.score_used
               << std::setw(8)  << std::fixed << std::setprecision(2) << s.confidence
               << std::setw(10) << std::fixed << std::setprecision(1) << s.avg_tp_mbps
               << std::setw(10) << std::fixed << std::setprecision(1) << s.avg_rtt_ms
               << std::setw(10) << std::fixed << std::setprecision(2) << s.avg_loss_pct
               << std::setw(10) << std::fixed << std::setprecision(1) << s.avg_jitter_ms
               << "\n";
+  }
+}
+
+static const char* yn(bool b) { return b ? "true" : "false"; }
+
+static void run_one(ScenarioId sid, AgentConfig cfg) {
+  std::cout << "\n=== Scenario "
+            << (sid == ScenarioId::A ? "A" : sid == ScenarioId::B ? "B" : sid == ScenarioId::C ? "C" : "D")
+            << " (useEwma=" << yn(cfg.score.useEwma) << ") ===\n";
+
+  TelemetryAgent agent(cfg);
+  const std::vector<std::string> ifaces = {"eth0", "wifi0", "lte0", "sat0"};
+  for (auto& i : ifaces) agent.ensure_interface(i);
+
+  // Deterministic scenarios, 90 seconds
+  ScenarioGenerator gen(sid, ImperfectDataConfig{.enable_missing = false, .enable_late = false});
+
+  for (int64_t t = 0; t < 90; ++t) {
+    agent.note_time(t);
+    for (const auto& iface : ifaces) {
+      auto g = gen.sample(iface, t);
+      if (!g) continue;
+      agent.ingest(iface, g->ts, g->m);
+    }
+
+    auto snaps = agent.snapshots();
+    print_table(t, snaps);
+
+    auto evs = agent.drain_transitions();
+    for (const auto& ev : evs) {
+      std::cout << "  TRANSITION [" << ev.ts << "s] " << ev.iface
+                << " " << status_str(ev.from) << " -> " << status_str(ev.to)
+                << " | " << ev.reason << "\n";
+    }
+
+    agent.record_tick();
+  }
+
+  auto rs = agent.summary();
+  std::cout << "\n=== End-of-run summary (rank by avg score_used) ===\n";
+  for (const auto& s : rs.ranked) {
+    std::cout << "  " << s.iface << " avg_score=" << std::fixed << std::setprecision(3)
+              << s.avg_score << " last_status=" << status_str(s.last_status) << "\n";
   }
 }
 
@@ -76,11 +120,13 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  ScenarioId sid = parse_scenario(scenario_arg);
+  const bool run_all = (scenario_arg == "all" || scenario_arg == "ALL");
+  ScenarioId sid = run_all ? ScenarioId::A : parse_scenario(scenario_arg);
 
   AgentConfig cfg;
   // Sensible defaults (tune later)
   cfg.score.ewma_alpha = 0.25;
+  cfg.score.useEwma = true; // default (Strategy 2)
   cfg.fsm.healthy_enter = 0.78;
   cfg.fsm.healthy_exit  = 0.70;
   cfg.fsm.down_enter    = 0.35;
@@ -91,51 +137,21 @@ int main(int argc, char** argv) {
   cfg.fsm.down_exit_N     = 5;
   cfg.fsm.min_dwell_sec   = 5;
 
-  TelemetryAgent agent(cfg);
+  auto run_sid = [&](ScenarioId x) {
+    // Run twice: Strategy 1 then Strategy 2.
+    cfg.score.useEwma = false;
+    run_one(x, cfg);
+    cfg.score.useEwma = true;
+    run_one(x, cfg);
+  };
 
-  // Required interfaces :contentReference[oaicite:11]{index=11}
-  const std::vector<std::string> ifaces = {"eth0", "wifi0", "lte0", "sat0"};
-  for (auto& i : ifaces)  {
-    agent.ensure_interface(i);
-  }
-
-  // Deterministic scenarios, 90 seconds :contentReference[oaicite:12]{index=12}
-  ScenarioGenerator gen(sid, ImperfectDataConfig{
-    .enable_missing = false,
-    .enable_late = false
-  });
-
-  for (int64_t t = 0; t < 90; ++t) {
-    std::printf("Advance time for expiration even if missing samples.\n");
-    agent.note_time(t);
-
-    for (const auto& iface : ifaces) {
-      auto g = gen.sample(iface, t);
-      if (!g) continue; // missing (if enabled)
-      agent.ingest(iface, g->ts, g->m);
-    }
-
-    // Print per-tick states (scores+status over time requested) :contentReference[oaicite:13]{index=13}
-    auto snaps = agent.snapshots();
-    print_table(t, snaps);
-
-    // Print transitions with reasons :contentReference[oaicite:14]{index=14}
-    auto evs = agent.drain_transitions();
-    for (const auto& ev : evs) {
-      std::cout << "  TRANSITION [" << ev.ts << "s] " << ev.iface
-                << " " << status_str(ev.from) << " -> " << status_str(ev.to)
-                << " | " << ev.reason << "\n";
-    }
-
-    agent.record_tick();
-  }
-
-  // End-of-run summary ranking :contentReference[oaicite:15]{index=15}
-  auto rs = agent.summary();
-  std::cout << "\n=== End-of-run summary (rank by avg score) ===\n";
-  for (const auto& s : rs.ranked) {
-    std::cout << "  " << s.iface << " avg_score=" << std::fixed << std::setprecision(3)
-              << s.avg_score << " last_status=" << status_str(s.last_status) << "\n";
+  if (run_all) {
+    run_sid(ScenarioId::A);
+    run_sid(ScenarioId::B);
+    run_sid(ScenarioId::C);
+    run_sid(ScenarioId::D);
+  } else {
+    run_sid(sid);
   }
 
   return 0;

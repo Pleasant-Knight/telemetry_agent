@@ -49,7 +49,9 @@ std::vector<TransitionEvent> TelemetryAgent::drain_transitions() {
 void TelemetryAgent::record_tick() {
   for (const auto& [iface, tr] : trackers_) {
     auto s = tr.snapshot();
-    score_sum_[iface] += s.score_smoothed;
+    // Track the score actually used for decisions so comparisons between
+    // useEwma=false and useEwma=true are meaningful.
+    score_sum_[iface] += s.score_used;
     score_count_[iface] += 1;
   }
 }
