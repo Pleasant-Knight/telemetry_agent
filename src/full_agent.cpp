@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iomanip>
 #include <random>  // For simulating imperfections, but deterministic here
+#include <cassert>
 
 struct Measurement {
     int timestamp;
@@ -56,7 +57,8 @@ private:
 
 public:
     void add(const Measurement& m, int current_time) {
-        if (m.timestamp < current_time - WINDOW_SEC) {
+        const int oldest_allowed = current_time - (WINDOW_SEC - 1);
+        if (m.timestamp < oldest_allowed) {
             std::cerr << "Discarding old sample at t=" << m.timestamp << std::endl;
             return;
         }
@@ -68,7 +70,7 @@ public:
         data.insert(it, m);
         addToSums(m);
         // Evict old
-        while (!data.empty() && data.front().timestamp < current_time - WINDOW_SEC) {
+        while (!data.empty() && data.front().timestamp < oldest_allowed) {
             removeFromSums(data.front());
             data.pop_front();
         }
@@ -351,10 +353,10 @@ void testWindowBounded() {
 void testLateSample() {
     RollingWindow w;
     w.add({10, 10.0, 10.0, 10.0, 10.0}, 50);  // Within window
-    w.add({5, 5.0, 5.0, 5.0, 5.0}, 50);      // Late, insert
-    assert(w.getAvgRTT() == 7.5);             // Average of 5 and 10
+    w.add({6, 6.0, 6.0, 6.0, 6.0}, 50);      // Late but within window
+    assert(w.getAvgRTT() == 8.0);             // Average of 6 and 10
     w.add({0, 0.0, 0.0, 0.0, 0.0}, 50);      // Too old, discard
-    assert(w.getAvgRTT() == 7.5);
+    assert(w.getAvgRTT() == 8.0);
     std::cout << "Late sample test passed" << std::endl;
 }
 
@@ -376,7 +378,7 @@ int main(int argc, char* argv[]) {
     // Bonus comparison: Run Strategy 2 separately if desired
     // TelemetryAgent agent_ewma(true);
 
-    int current_time = 0;
+    size_t current_time = 0;
     while (current_time < 90) {
         for (const auto& [iface, meas_vec] : sequences) {
             // Feed if sample at this time (vectors are indexed by t, but with erasures for missing)

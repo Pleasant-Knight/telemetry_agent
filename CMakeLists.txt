@@ -102,6 +102,9 @@ file(GLOB_RECURSE BENCH_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/bench/*.cpp"
 )
 
+set(FULL_AGENT_BENCH_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/bench/benchmark_full_agent.cpp")
+list(REMOVE_ITEM BENCH_FILES "${FULL_AGENT_BENCH_SOURCE}")
+
 set(BENCH_TARGETS "")
 foreach(bench_src IN LISTS BENCH_FILES)
     get_filename_component(bench_name "${bench_src}" NAME_WE)
@@ -109,6 +112,13 @@ foreach(bench_src IN LISTS BENCH_FILES)
     target_link_libraries("${bench_name}" PRIVATE telemetry_agent)
     list(APPEND BENCH_TARGETS "${bench_name}")
 endforeach()
+
+# Full agent benchmark (runs the separate executable)
+if (EXISTS "${FULL_AGENT_BENCH_SOURCE}")
+    add_executable(benchmark_full_agent "${FULL_AGENT_BENCH_SOURCE}")
+    add_dependencies(benchmark_full_agent full_agent)
+    list(APPEND BENCH_TARGETS "benchmark_full_agent")
+endif()
 
 add_custom_target(run_bench
     DEPENDS ${BENCH_TARGETS}
