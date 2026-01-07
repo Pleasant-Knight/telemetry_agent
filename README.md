@@ -354,13 +354,13 @@ The telemetry agent was designed to behave predictably under imperfect or advers
 
 ---
 
-## Production Considerations (Hoplynk Device)
-This implementation focuses on correctness, determinism, and clarity. For a production Hoplynk router, the following enhancements would be added:
+## Production Considerations (Physical Router Device)
+This implementation focuses on correctness, determinism, and clarity; howwever, for a production router, the following enhancements should be added:
 
 **Must-have**
-* watchdog & liveness monitoring
-* ingestion backpressure
-* state persistence across restarts
+* watchdog & liveness monitoring.
+* ingestion backpressure.
+* state persistence across restarts.
 
 **Next**
 * multi-threaded pipeline (collect → score → publish)
@@ -371,3 +371,4 @@ This implementation focuses on correctness, determinism, and clarity. For a prod
 * observability metrics
 * security hardening
 ---
+
