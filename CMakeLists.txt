@@ -36,7 +36,8 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
 )
 
 set(CLI_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/telemetry_agent_cli.cpp")
-list(REMOVE_ITEM SRC_FILES "${CLI_SOURCE}")
+set(FULL_AGENT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/full_agent.cpp")
+list(REMOVE_ITEM SRC_FILES "${CLI_SOURCE}" "${FULL_AGENT_SOURCE}")
 
 add_library(telemetry_agent STATIC ${SRC_FILES})
 
@@ -48,6 +49,9 @@ target_include_directories(telemetry_agent
 # CLI executable
 add_executable(telemetry_agent_cli "${CLI_SOURCE}")
 target_link_libraries(telemetry_agent_cli PRIVATE telemetry_agent)
+
+# Full agent executable (independent solution)
+add_executable(full_agent "${FULL_AGENT_SOURCE}")
 
 # Create a test executable for each cpp under tests/
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
@@ -62,6 +66,19 @@ foreach(test_src IN LISTS TEST_FILES)
     list(APPEND TEST_TARGETS "${test_name}")
 endforeach()
 
+# Create a test executable for each cpp under tests_full_agent/ (no telemetry_agent link)
+file(GLOB_RECURSE FULL_AGENT_TEST_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests_full_agent/*.cpp"
+)
+
+set(FULL_AGENT_TEST_TARGETS "")
+foreach(full_test_src IN LISTS FULL_AGENT_TEST_FILES)
+    get_filename_component(full_test_name "${full_test_src}" NAME_WE)
+    add_executable("${full_test_name}" "${full_test_src}")
+    add_dependencies("${full_test_name}" full_agent)
+    list(APPEND FULL_AGENT_TEST_TARGETS "${full_test_name}")
+endforeach()
+
 # Enable testing
 enable_testing()
 
@@ -70,10 +87,14 @@ foreach(test_name IN LISTS TEST_TARGETS)
     add_test(NAME "${test_name}" COMMAND "${test_name}")
 endforeach()
 
+foreach(test_name IN LISTS FULL_AGENT_TEST_TARGETS)
+    add_test(NAME "${test_name}" COMMAND "${test_name}")
+endforeach()
+
 # Optional: Add a custom target to run tests
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS ${TEST_TARGETS}
+    DEPENDS ${TEST_TARGETS} ${FULL_AGENT_TEST_TARGETS}
 )
 
 # Create a benchmark executable for each cpp under bench/
