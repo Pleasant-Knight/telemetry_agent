@@ -226,12 +226,18 @@ public:
         for (auto& [iface, state] : interfaces) {
             state.computeScore(use_ewma);
             auto [score, status] = state.getLatest();
-            std::cout << "t=" << current_time << " " << iface << ": score=" << std::fixed << std::setprecision(2) << score
-                      << " status=" << statusToString(status) << std::endl;
+            std::printf("t=%d %s: score=%.2f status=%s\n",
+                        current_time,
+                        iface.c_str(),
+                        score,
+                        statusToString(status).c_str());
 
             if (last_statuses.count(iface) && last_statuses[iface] != status) {
-                std::cout << "Transition: " << iface << " from " << statusToString(last_statuses[iface])
-                          << " to " << statusToString(status) << " (score=" << score << ")" << std::endl;
+                std::printf("Transition: %s from %s to %s (score=%.2f)\n",
+                            iface.c_str(),
+                            statusToString(last_statuses[iface]).c_str(),
+                            statusToString(status).c_str(),
+                            score);
             }
             last_statuses[iface] = status;
         }
@@ -245,9 +251,9 @@ public:
         std::sort(rankings.begin(), rankings.end(), [](const auto& a, const auto& b) {
             return a.second > b.second;
         });
-        std::cout << "End-of-run summary (ranked by avg score):" << std::endl;
+        std::printf("End-of-run summary (ranked by avg score):\n");
         for (const auto& [iface, avg] : rankings) {
-            std::cout << iface << ": " << std::fixed << std::setprecision(2) << avg << std::endl;
+            std::printf("%s: %.2f\n", iface.c_str(), avg);
         }
     }
 };
@@ -338,7 +344,7 @@ void testHysteresis() {
     // 5 low: flap
     for (int i = 0; i < 5; ++i) hs.update(0.7);
     assert(hs.getStatus() == Status::Degraded);
-    std::cout << "Hysteresis test passed" << std::endl;
+    std::printf("Hysteresis test passed\n");
 }
 
 void testWindowBounded() {
@@ -347,7 +353,7 @@ void testWindowBounded() {
         w.add({t, 1.0, 1.0, 1.0, 1.0}, t);
         assert(w.size() <= 45);
     }
-    std::cout << "Window bounded test passed" << std::endl;
+    std::printf("Window bounded test passed\n");
 }
 
 void testLateSample() {
@@ -357,7 +363,7 @@ void testLateSample() {
     assert(w.getAvgRTT() == 8.0);             // Average of 6 and 10
     w.add({0, 0.0, 0.0, 0.0, 0.0}, 50);      // Too old, discard
     assert(w.getAvgRTT() == 8.0);
-    std::cout << "Late sample test passed" << std::endl;
+    std::printf("Late sample test passed\n");
 }
 
 int main(int argc, char* argv[]) {
