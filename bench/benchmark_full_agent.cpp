@@ -2,7 +2,7 @@
 // Runs scenarios A/B/C and measures wall time for each run.
 #include <chrono>
 #include <cstdlib>
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -39,7 +39,7 @@ static Options parse_args(int argc, char** argv) {
     } else if (a == "--runs" && i + 1 < argc) {
       opt.runs = parse_int(argv[++i], "--runs");
     } else if (a == "--help" || a == "-h") {
-      std::cout << "Usage: benchmark_full_agent [--scenario A|B|C] [--runs N]\n";
+      std::printf("Usage: benchmark_full_agent [--scenario A|B|C] [--runs N]\n");
       std::exit(0);
     } else {
       std::cerr << "Unknown arg: " << a << "\n";
@@ -78,8 +78,8 @@ int main(int argc, char** argv) {
     scenarios = {opt.scenario};
   }
 
-  std::cout << "benchmark_full_agent\n";
-  std::cout << "  runs=" << opt.runs << "\n\n";
+  std::printf("benchmark_full_agent\n");
+  std::printf("  runs=%d\n\n", opt.runs);
 
   for (char s : scenarios) {
     double total = 0.0;
@@ -87,10 +87,8 @@ int main(int argc, char** argv) {
       total += run_once(s);
     }
     const double avg = total / std::max(1, opt.runs);
-    std::cout << "Scenario " << s
-              << " avg_time_s=" << avg
-              << " total_time_s=" << total
-              << "\n";
+    std::printf("Scenario %c avg_time_s=%.6f total_time_s=%.6f\n",
+                s, avg, total);
   }
 
   return 0;

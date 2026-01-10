@@ -1,5 +1,5 @@
 #include <cassert>
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -74,7 +74,7 @@ int main() {
   assert(transitions_ewma <= 6);
   assert(transitions_raw <= 8);
 
-  std::cout << "test_scenario_a OK (raw_trans=" << transitions_raw
-            << ", ewma_trans=" << transitions_ewma << ")\n";
+  std::printf("test_scenario_a OK (raw_trans=%d, ewma_trans=%d)\n",
+              transitions_raw, transitions_ewma);
   return 0;
 }

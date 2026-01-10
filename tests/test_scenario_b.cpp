@@ -1,5 +1,5 @@
 #include <cassert>
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -63,6 +63,6 @@ int main() {
   // In EWMA mode, we expect only a few transitions at most.
   assert(ewma_trans <= 6);
 
-  std::cout << "test_scenario_b OK (raw=" << raw_trans << ", ewma=" << ewma_trans << ")\n";
+  std::printf("test_scenario_b OK (raw=%d, ewma=%d)\n", raw_trans, ewma_trans);
   return 0;
 }

@@ -10,8 +10,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
-#include <iomanip>
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -72,11 +71,12 @@ static Options parse_args(int argc, char** argv) {
     } else if (a == "--late-by" && i + 1 < argc) {
       opt.late_by_sec = parse_int(argv[++i], "--late-by");
     } else if (a == "--help" || a == "-h") {
-      std::cout
-        << "Usage: benchmark_scenarios [--scenario A|B|C|D] [--seconds N] [--runs N]\n"
-        << "                           [--missing] [--late]\n"
-        << "                           [--drop-every N] [--late-every N] [--late-by N]\n\n"
-        << "Default: runs scenarios A,B,C,D and prints a comparison table for useEwma=false/true.\n";
+      std::printf(
+        "Usage: benchmark_scenarios [--scenario A|B|C|D] [--seconds N] [--runs N]\n"
+        "                           [--missing] [--late]\n"
+        "                           [--drop-every N] [--late-every N] [--late-by N]\n\n"
+        "Default: runs scenarios A,B,C,D and prints a comparison table for useEwma=false/true.\n"
+      );
       std::exit(0);
     } else {
       std::cerr << "Unknown arg: " << a << "\n";
@@ -160,33 +160,28 @@ static BenchResult bench_one_scenario(const Options& opt, ScenarioId sid, bool u
 }
 
 static void print_table_header(const Options& opt) {
-  std::cout << "benchmark_scenarios\n";
-  std::cout << "  runs=" << opt.runs
-            << " seconds=" << opt.seconds
-            << " missing=" << (opt.missing ? "true" : "false")
-            << " late=" << (opt.late ? "true" : "false");
-  if (opt.missing) std::cout << " drop_every=" << opt.drop_every_n;
-  if (opt.late) std::cout << " late_every=" << opt.late_every_n << " late_by=" << opt.late_by_sec;
-  std::cout << "\n\n";
+  std::printf("benchmark_scenarios\n");
+  std::printf("  runs=%d seconds=%d missing=%s late=%s",
+              opt.runs,
+              opt.seconds,
+              opt.missing ? "true" : "false",
+              opt.late ? "true" : "false");
+  if (opt.missing) std::printf(" drop_every=%d", opt.drop_every_n);
+  if (opt.late) std::printf(" late_every=%d late_by=%d", opt.late_every_n, opt.late_by_sec);
+  std::printf("\n\n");
 
-  std::cout << std::left
-            << std::setw(9)  << "scenario"
-            << std::setw(10) << "useEwma"
-            << std::setw(14) << "avg_ms/run"
-            << std::setw(16) << "total_ingests"
-            << std::setw(14) << "ingests/s"
-            << "\n";
-  std::cout << std::string(63, '-') << "\n";
+  std::printf("%-9s%-10s%-14s%-16s%-14s\n",
+              "scenario", "useEwma", "avg_ms/run", "total_ingests", "ingests/s");
+  std::printf("%s\n", std::string(63, '-').c_str());
 }
 
 static void print_row(const BenchResult& r) {
-  std::cout << std::left
-            << std::setw(9)  << scenario_name(r.scenario)
-            << std::setw(10) << (r.useEwma ? "true" : "false")
-            << std::setw(14) << std::fixed << std::setprecision(3) << r.avg_time_ms()
-            << std::setw(16) << r.total_ingests
-            << std::setw(14) << std::fixed << std::setprecision(0) << r.ingests_per_s()
-            << "\n";
+  std::printf("%-9s%-10s%-14.3f%-16lld%-14.0f\n",
+              scenario_name(r.scenario),
+              r.useEwma ? "true" : "false",
+              r.avg_time_ms(),
+              static_cast<long long>(r.total_ingests),
+              r.ingests_per_s());
 }
 
 int main(int argc, char** argv) {
@@ -223,9 +218,11 @@ int main(int argc, char** argv) {
     print_row(r_ewma);
   }
 
-  std::cout << "\nLegend:\n"
-            << "  avg_ms/run = average wall time per run (lower is faster)\n"
-            << "  total_ingests = total number of agent.ingest() calls across all runs\n"
-            << "  ingests/s = total_ingests / total_wall_time\n";
+  std::printf(
+    "\nLegend:\n"
+    "  avg_ms/run = average wall time per run (lower is faster)\n"
+    "  total_ingests = total number of agent.ingest() calls across all runs\n"
+    "  ingests/s = total_ingests / total_wall_time\n"
+  );
   return 0;
 }

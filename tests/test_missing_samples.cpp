@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cmath>
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -65,6 +65,6 @@ int main() {
     }
   }
 
-  std::cout << "test_missing_samples OK\n";
+  std::printf("test_missing_samples OK\n");
   return 0;
 }

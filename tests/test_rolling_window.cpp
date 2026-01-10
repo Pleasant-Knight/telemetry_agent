@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cmath>
-#include <iostream>
+#include <cstdio>
 
 #include "rolling_window.hpp"
 
@@ -45,6 +45,6 @@ int main() {
   bool reject = w.ingest(10, m);
   assert(!reject);
 
-  std::cout << "test_rolling_window OK\n";
+  std::printf("test_rolling_window OK\n");
   return 0;
 }

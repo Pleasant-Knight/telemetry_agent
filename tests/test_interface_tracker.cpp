@@ -1,5 +1,5 @@
 #include <cassert>
-#include <iostream>
+#include <cstdio>
 
 #include "interface_tracker.hpp"
 
@@ -44,6 +44,6 @@ int main() {
     assert(std::abs(s.score_used - s.score_smoothed) < 1e-9);
   }
 
-  std::cout << "test_interface_tracker OK\n";
+  std::printf("test_interface_tracker OK\n");
   return 0;
 }
