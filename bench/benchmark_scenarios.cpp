@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "telemetry_agent.hpp"
 #include "scenarios.hpp"

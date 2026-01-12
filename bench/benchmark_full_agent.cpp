@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <iostream>
 
 struct Options {
   bool run_all = true;
